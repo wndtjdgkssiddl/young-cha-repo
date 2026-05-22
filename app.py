@@ -246,3 +246,27 @@ elif page == "2️⃣ 누적 전체 데이터 추이":
             st.info("날짜(타임스탬프) 데이터가 부족하여 트렌드를 그릴 수 없습니다.")
     else:
         st.warning("분석할 데이터가 존재하지 않습니다.")
+
+
+st.markdown("---")
+    st.subheader("🤖 AI 리뷰 통합 요약 (Gemini)")
+    
+    # 버튼을 누르면 AI 요약 시작
+    if st.button("현재 매장의 리뷰 요약하기"):
+        with st.spinner("AI가 리뷰를 꼼꼼히 읽고 요약 중입니다..."):
+            # 주관식 리뷰 텍스트만 모으기 (결측치 제외)
+            reviews = " ".join(target_df['주관식(피드백)'].dropna().astype(str).tolist())
+            
+            if len(reviews) > 10:
+                # Gemini에게 지시 내리기 (프롬프트)
+                prompt = f"다음은 영등포시장 특정 매장의 고객 리뷰들입니다. 장점과 개선점을 3줄로 깔끔하게 요약해 주세요: {reviews}"
+                
+                try:
+                    response = model.generate_content(prompt)
+                    # 결과 출력
+                    st.success("AI 요약 완료!")
+                    st.write(response.text)
+                except Exception as e:
+                    st.error(f"요약 중 오류가 발생했습니다: {e}")
+            else:
+                st.warning("요약할 주관식 리뷰 데이터가 부족합니다.")
