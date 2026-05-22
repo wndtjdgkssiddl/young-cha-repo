@@ -26,7 +26,7 @@ st.markdown("""
 @st.cache_data(ttl=600)  # 💡 ttl=600은 10분(600초)마다 구글 시트에서 데이터를 새로 새로고침하겠다는 뜻입니다.
 def load_data():
     # ⚠️ 아래 주소 부분을 방금 1단계에서 복사한 본인의 구글 시트 "웹에 게시" URL로 교체하세요!
-    GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv"
+    GOOGLE_SHEET_CSV_URL = https://docs.google.com/spreadsheets/d/e/2PACX-1vSY59eppT8mU0O94FXc8vO9lRIf126sIRVbxhD30rMSVJeu-WTvAPDwXupJcZq9ZHHyHoM76U9sl73X/pub?gid=2099030146&single=true&output=csv
     
     try:
         # 인터넷 주소에서 실시간으로 CSV 데이터를 긁어옵니다.
