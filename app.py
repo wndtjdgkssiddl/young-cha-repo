@@ -21,16 +21,21 @@ st.markdown("""
 
 
 # ==========================================
-# 2. 데이터 불러오기 및 전처리
+# 2. 데이터 불러오기 및 전처리 (구글 시트 실시간 연동)
 # ==========================================
-@st.cache_data
+@st.cache_data(ttl=600)  # 💡 ttl=600은 10분(600초)마다 구글 시트에서 데이터를 새로 새로고침하겠다는 뜻입니다.
 def load_data():
+    # ⚠️ 아래 주소 부분을 방금 1단계에서 복사한 본인의 구글 시트 "웹에 게시" URL로 교체하세요!
+    GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv"
+    
     try:
-        df = pd.read_csv('review.csv.csv', encoding='utf-8-sig')
-    except:
-        df = pd.read_csv('review.csv.csv', encoding='cp949')
-
-    # 열 이름이 너무 길어서 다루기 쉽게 짧은 별칭으로 매핑
+        # 인터넷 주소에서 실시간으로 CSV 데이터를 긁어옵니다.
+        df = pd.read_csv(GOOGLE_SHEET_CSV_URL, encoding='utf-8')
+    except Exception as e:
+        st.error(f"구글 시트를 불러오는 중 오류가 발생했습니다: {e}")
+        return pd.DataFrame(), []
+    
+    # --- 이하 열 이름 매핑 및 전처리 로직은 기존 코드와 동일합니다 ---
     col_mapping = {
         '타임스탬프': '일시',
         'Q4. 오늘 방문하여 이용하신 점포(가게)의 이름은 무엇입니까? (장문형 또는 단답형)  ': '가게명',
@@ -42,30 +47,25 @@ def load_data():
         'Q10. 이 가게(점포)만의 가장 큰 매력이나 장점은 무엇이라고 생각하십니까?': '주관식(장점)',
         "Q10. [AI 리포트 연계] 해당 점포의 사장님께 전하고 싶은 '칭찬'이나 꼭 개선되었으면 하는 '매장 운영 꿀팁'을 자유롭게 한 줄 이상 적어주세요. (장문형)  ": '주관식(피드백)'
     }
-
-    # 존재하는 컬럼만 변경
+    
     rename_dict = {k: v for k, v in col_mapping.items() if k in df.columns}
     df = df.rename(columns=rename_dict)
-
-    # 1-5 척도(Ordinal Data) 열 리스트
+    
     ordinal_cols = ['만족도(품질/맛)', '가격 적절성', '친절도', '청결도/위생', '결제 편의성']
-
-    # 숫자형으로 강제 변환 (문자가 섞여있을 경우 대비)
+    
     for col in ordinal_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    # 가게명 앞뒤 공백 제거
+            
     if '가게명' in df.columns:
         df['가게명'] = df['가게명'].astype(str).str.strip()
-
-    # 날짜 데이터 처리 ('년-월' 파생 변수 생성)
+        
     if '일시' in df.columns:
         df['일시'] = pd.to_datetime(df['일시'], errors='coerce')
         df['월별'] = df['일시'].dt.strftime('%Y-%m')
-
+        
     return df, ordinal_cols
-
+    
 
 df, ordinal_cols = load_data()
 
