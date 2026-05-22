@@ -2,7 +2,17 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import google.generativeai as genai  # 새로 추가된 라이브러리
 
+# Streamlit 금고에서 API 키 꺼내서 Gemini 세팅하기
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # 빠르고 가벼운 1.5 Flash 모델 사용
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error("API 키 설정에 문제가 있습니다. Streamlit Secrets 설정을 확인해 주세요.")
+
+# --- 기존 데이터 불러오기 함수 등 코드는 그대로 유지 ---
 # ==========================================
 # 1. 페이지 및 디자인 기본 설정
 # ==========================================
