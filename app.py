@@ -2,23 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import google.generativeai as genai  # 새로 추가된 라이브러리
+import google.generativeai as genai
 
-# Streamlit 금고에서 API 키 꺼내서 Gemini 세팅하기
-try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # 빠르고 가벼운 1.5 Flash 모델 사용
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except Exception as e:
-    st.error("API 키 설정에 문제가 있습니다. Streamlit Secrets 설정을 확인해 주세요.")
-
-# --- 기존 데이터 불러오기 함수 등 코드는 그대로 유지 ---
 # ==========================================
 # 1. 페이지 및 디자인 기본 설정
 # ==========================================
 st.set_page_config(page_title="영등포시장 상권 분석 대시보드", layout="wide", page_icon="📈")
 
-# 커스텀 CSS로 깔끔한 웹디자인 적용
 st.markdown("""
     <style>
     .reportview-container { background: #f8f9fa; }
@@ -29,23 +19,26 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# API 키 세팅 (Streamlit Secrets 활용)
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error("API 키 설정에 문제가 있습니다. Streamlit Secrets 설정을 확인해 주세요.")
 
 # ==========================================
-# 2. 데이터 불러오기 및 전처리 (구글 시트 실시간 연동)
+# 2. 데이터 불러오기 및 전처리 (구글 시트 연동)
 # ==========================================
-@st.cache_data(ttl=600)  # 💡 ttl=600은 10분(600초)마다 구글 시트에서 데이터를 새로 새로고침하겠다는 뜻입니다.
+@st.cache_data(ttl=600)
 def load_data():
-    # ⚠️ 아래 주소 부분을 방금 1단계에서 복사한 본인의 구글 시트 "웹에 게시" URL로 교체하세요!
     GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSY59eppT8mU0O94FXc8vO9lRIf126sIRVbxhD30rMSVJeu-WTvAPDwXupJcZq9ZHHyHoM76U9sl73X/pub?gid=2099030146&single=true&output=csv"
     
     try:
-        # 인터넷 주소에서 실시간으로 CSV 데이터를 긁어옵니다.
         df = pd.read_csv(GOOGLE_SHEET_CSV_URL, encoding='utf-8')
     except Exception as e:
         st.error(f"구글 시트를 불러오는 중 오류가 발생했습니다: {e}")
         return pd.DataFrame(), []
     
-    # --- 이하 열 이름 매핑 및 전처리 로직은 기존 코드와 동일합니다 ---
     col_mapping = {
         '타임스탬프': '일시',
         'Q4. 오늘 방문하여 이용하신 점포(가게)의 이름은 무엇입니까? (장문형 또는 단답형)  ': '가게명',
@@ -75,7 +68,6 @@ def load_data():
         df['월별'] = df['일시'].dt.strftime('%Y-%m')
         
     return df, ordinal_cols
-    
 
 df, ordinal_cols = load_data()
 
@@ -83,12 +75,11 @@ df, ordinal_cols = load_data()
 # 3. 사이드바 네비게이션
 # ==========================================
 st.sidebar.title("📊 분석 메뉴")
-page = st.sidebar.radio("원하시는 페이지를 선택하세요",
+page = st.sidebar.radio("원하시는 페이지를 선택하세요", 
                         ["1️⃣ 월별 & 점포별 개별 분석", "2️⃣ 누적 전체 데이터 추이"])
 
-# 빈 데이터프레임 방지용 처리
 if df.empty:
-    st.error("google sheet 응답 내용이 비어있습니다. 응답을 먼저 수집해 주세요.")
+    st.error("데이터 파일에 응답 내용이 비어있습니다. 응답을 먼저 수집해 주세요.")
     st.stop()
 
 # ==========================================
@@ -97,40 +88,34 @@ if df.empty:
 if page == "1️⃣ 월별 & 점포별 개별 분석":
     st.title("🏪 특정 달 & 점포별 결과 분석")
     st.markdown("선택한 월과 매장의 **평균 만족도**와 **1점/5점 특이점 리뷰**를 집중 분석합니다.")
-
-    # 상단 필터
+    
     col_filter1, col_filter2 = st.columns(2)
     with col_filter1:
         month_list = ["전체 기간"] + sorted(list(df['월별'].dropna().unique()))
         selected_month = st.selectbox("📅 분석할 달(Month)을 선택하세요", month_list)
     with col_filter2:
-        # 월별 필터링 먼저 적용
         temp_df = df if selected_month == "전체 기간" else df[df['월별'] == selected_month]
         store_list = ["전체 매장 보기"] + sorted(list(temp_df['가게명'].dropna().unique()))
         selected_store = st.selectbox("🏪 매장(가게)을 선택하세요", store_list)
-
-    # 최종 필터링 적용
+        
     if selected_store != "전체 매장 보기":
         target_df = temp_df[temp_df['가게명'] == selected_store]
     else:
         target_df = temp_df
-
+        
     if len(target_df) == 0:
         st.warning("선택하신 조건에 해당하는 데이터가 없습니다.")
     else:
         st.markdown("---")
         st.subheader("📊 핵심 평가 항목 평균 (1~5점 척도)")
-
-        # 1-5 척도 평균 계산
+        
         avg_scores = target_df[ordinal_cols].mean().round(1)
-
-        # Metric 나열
+        
         cols = st.columns(len(ordinal_cols))
         for i, col in enumerate(ordinal_cols):
             with cols[i]:
                 st.metric(label=col, value=f"{avg_scores[col]:.1f}점" if pd.notnull(avg_scores[col]) else "데이터 없음")
-
-        # 방사형(Radar) 차트로 그리기
+                
         fig_radar = go.Figure()
         fig_radar.add_trace(go.Scatterpolar(
             r=avg_scores.values,
@@ -146,30 +131,24 @@ if page == "1️⃣ 월별 & 점포별 개별 분석":
         )
         st.plotly_chart(fig_radar, use_container_width=True)
 
-        # ----------------------------------------
-        # 특이점 정리 (주관식 중심: 1점 및 5점 리뷰)
-        # ----------------------------------------
         st.markdown("---")
         st.subheader("💡 특이점 분석 (1점 및 5점 피드백 모아보기)")
-        st.markdown("각 평가 항목 중 **1점(매우 부정적)** 또는 **5점(매우 긍정적)**을 준 응답자들의 주관식 피드백입니다.")
-
-        # 5점 리뷰 (최소 하나라도 5점을 준 행 추출)
+        
         is_5_star = (target_df[ordinal_cols] == 5).any(axis=1)
         df_5 = target_df[is_5_star]
-
-        # 1점 리뷰 (최소 하나라도 1점을 준 행 추출)
+        
         is_1_star = (target_df[ordinal_cols] == 1).any(axis=1)
         df_1 = target_df[is_1_star]
-
+        
         col_feedback1, col_feedback2 = st.columns(2)
-
+        
         with col_feedback1:
             st.markdown("### 😍 매우 긍정적 피드백 (항목 중 5점 포함)")
             if len(df_5) > 0:
                 for idx, row in df_5.iterrows():
                     feedback_text = row.get('주관식(피드백)', '')
                     merit_text = row.get('주관식(장점)', '')
-
+                    
                     if pd.notnull(feedback_text) or pd.notnull(merit_text):
                         st.markdown(f"""
                         <div class="outlier-box-5">
@@ -180,13 +159,13 @@ if page == "1️⃣ 월별 & 점포별 개별 분석":
                         """, unsafe_allow_html=True)
             else:
                 st.info("5점이 포함된 응답 내역이 없습니다.")
-
+                
         with col_feedback2:
             st.markdown("### 🚨 매우 부정적 피드백 (항목 중 1점 포함)")
             if len(df_1) > 0:
                 for idx, row in df_1.iterrows():
                     feedback_text = row.get('주관식(피드백)', '')
-
+                    
                     if pd.notnull(feedback_text):
                         st.markdown(f"""
                         <div class="outlier-box-1">
@@ -197,6 +176,26 @@ if page == "1️⃣ 월별 & 점포별 개별 분석":
             else:
                 st.info("1점이 포함된 응답 내역이 없습니다. (훌륭합니다!)")
 
+        # ----------------------------------------
+        # AI 리뷰 통합 요약 (Gemini) - 위치 수정 완료!
+        # ----------------------------------------
+        st.markdown("---")
+        st.subheader("🤖 AI 리뷰 통합 요약 (Gemini)")
+        
+        if st.button("현재 매장의 리뷰 요약하기"):
+            with st.spinner("AI가 리뷰를 꼼꼼히 읽고 요약 중입니다..."):
+                reviews = " ".join(target_df['주관식(피드백)'].dropna().astype(str).tolist())
+                
+                if len(reviews) > 10:
+                    prompt = f"다음은 영등포시장 특정 매장의 고객 리뷰들입니다. 장점과 개선점을 3줄로 깔끔하게 요약해 주세요: {reviews}"
+                    try:
+                        response = model.generate_content(prompt)
+                        st.success("AI 요약 완료!")
+                        st.write(response.text)
+                    except Exception as e:
+                        st.error(f"요약 중 오류가 발생했습니다: {e}")
+                else:
+                    st.warning("요약할 주관식 리뷰 데이터가 부족합니다.")
 
 # ==========================================
 # 5. 페이지 2: 누적 전체 데이터 추이 페이지
@@ -204,37 +203,30 @@ if page == "1️⃣ 월별 & 점포별 개별 분석":
 elif page == "2️⃣ 누적 전체 데이터 추이":
     st.title("📈 누적 전체 데이터 & 트렌드 분석")
     st.markdown("전체 가게들의 누적 점수 비교와, 기간별(월별) 평균 점수 변화 추이를 확인합니다.")
-
+    
     st.markdown("---")
     st.subheader("🏆 전체 가게별 평가 항목 평균 비교")
-
+    
     if len(df) > 0:
-        # 가게별 오디널 데이터 평균
         store_avg = df.groupby('가게명')[ordinal_cols].mean().reset_index()
-
-        # 종합 평균 점수 파생변수 추가
         store_avg['종합 평균'] = store_avg[ordinal_cols].mean(axis=1)
         store_avg = store_avg.sort_values('종합 평균', ascending=False)
-
-        # 색상이 들어간 깔끔한 표 렌더링
+        
         st.dataframe(
-            store_avg.style.format(precision=1).background_gradient(cmap='YlGn', axis=None,
-                                                                    subset=ordinal_cols + ['종합 평균']),
+            store_avg.style.format(precision=1).background_gradient(cmap='YlGn', axis=None, subset=ordinal_cols + ['종합 평균']),
             use_container_width=True,
             hide_index=True
         )
-
+        
         st.markdown("---")
         st.subheader("📅 월별 평점 변화 추이 (전체 매장 평균)")
-
+        
         if df['월별'].nunique() > 0:
-            # 월별 추세 집계
             trend_df = df.groupby('월별')[ordinal_cols].mean().reset_index()
-
-            # Plotly 선 그래프
+            
             fig_trend = px.line(
-                trend_df,
-                x='월별',
+                trend_df, 
+                x='월별', 
                 y=ordinal_cols,
                 markers=True,
                 title="시간 흐름에 따른 주요 평가 항목 변화",
@@ -246,27 +238,3 @@ elif page == "2️⃣ 누적 전체 데이터 추이":
             st.info("날짜(타임스탬프) 데이터가 부족하여 트렌드를 그릴 수 없습니다.")
     else:
         st.warning("분석할 데이터가 존재하지 않습니다.")
-
-
-st.markdown("---")
-    st.subheader("🤖 AI 리뷰 통합 요약 (Gemini)")
-    
-    # 버튼을 누르면 AI 요약 시작
-    if st.button("현재 매장의 리뷰 요약하기"):
-        with st.spinner("AI가 리뷰를 꼼꼼히 읽고 요약 중입니다..."):
-            # 주관식 리뷰 텍스트만 모으기 (결측치 제외)
-            reviews = " ".join(target_df['주관식(피드백)'].dropna().astype(str).tolist())
-            
-            if len(reviews) > 10:
-                # Gemini에게 지시 내리기 (프롬프트)
-                prompt = f"다음은 영등포시장 특정 매장의 고객 리뷰들입니다. 장점과 개선점을 3줄로 깔끔하게 요약해 주세요: {reviews}"
-                
-                try:
-                    response = model.generate_content(prompt)
-                    # 결과 출력
-                    st.success("AI 요약 완료!")
-                    st.write(response.text)
-                except Exception as e:
-                    st.error(f"요약 중 오류가 발생했습니다: {e}")
-            else:
-                st.warning("요약할 주관식 리뷰 데이터가 부족합니다.")
